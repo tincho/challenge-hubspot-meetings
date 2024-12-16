@@ -28,7 +28,8 @@ const goal = (actions, account) => {
   console.log("goal");
   console.log(actions);
   for (const action of actions) {
-    account.actions.push(action)
+    account.actions.push(action);
+    account.markModified("actions");
   }
 };
 

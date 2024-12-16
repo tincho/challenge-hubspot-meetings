@@ -24,7 +24,7 @@ const generateLastModifiedDateFilter = (date, nowDate, propertyName = 'hs_lastmo
 
 const saveDomain = async domain => {
   // disable this for testing purposes
-  return;
+  // return;
 
   domain.markModified('integrations.hubspot.accounts');
   await domain.save();
@@ -415,7 +415,10 @@ const pullDataFromHubspot = async () => {
   const domain = await Domain.findOne({});
 
   for (const account of domain.integrations.hubspot.accounts) {
+
     console.log('start processing account');
+    console.log(account)
+    console.log(account.actions)
 
     try {
       await refreshAccessToken(domain, account.hubId);
@@ -426,7 +429,7 @@ const pullDataFromHubspot = async () => {
     const actions = [];
     const q = createQueue(account, actions);
 
-/*     try {
+    try {
       await processContacts(domain, account, q);
       console.log('process contacts');
     } catch (err) {
@@ -434,12 +437,12 @@ const pullDataFromHubspot = async () => {
     }
 
     try {
-      await processCompanies(domain, account.hubId, q);
+      await processCompanies(domain, account, q);
       console.log('process companies');
     } catch (err) {
       console.log(err, { apiKey: domain.apiKey, metadata: { operation: 'processCompanies', hubId: account.hubId } });
     }
- */
+
     try {
       await processMeetings(domain, account, q);
       console.log('process meetings');
