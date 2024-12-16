@@ -1,3 +1,4 @@
+
 const disallowedValues = [
   '[not provided]',
   'placeholder',
@@ -22,9 +23,13 @@ const filterNullValuesFromObject = object =>
 
 const normalizePropertyName = key => key.toLowerCase().replace(/__c$/, '').replace(/^_+|_+$/g, '').replace(/_+/g, '_');
 
-const goal = actions => {
+const goal = (actions, account) => {
   // this is where the data will be written to the database
+  console.log("goal");
   console.log(actions);
+  for (const action of actions) {
+    account.actions.push(action)
+  }
 };
 
 module.exports = {
