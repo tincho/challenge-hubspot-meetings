@@ -58,8 +58,8 @@ const refreshAccessToken = async (domain, hubId, tryCount) => {
 /**
  * Get recently modified companies as 100 companies per page
  */
-const processCompanies = async (domain, hubId, q) => {
-  const account = domain.integrations.hubspot.accounts.find(account => account.hubId === hubId);
+const processCompanies = async (domain, account, q) => {
+  const hubId = account.hubId;
   const lastPulledDate = new Date(account.lastPulledDates.companies);
   const now = new Date();
 
@@ -149,8 +149,8 @@ const processCompanies = async (domain, hubId, q) => {
 /**
  * Get recently modified contacts as 100 contacts per page
  */
-const processContacts = async (domain, hubId, q) => {
-  const account = domain.integrations.hubspot.accounts.find(account => account.hubId === hubId);
+const processContacts = async (domain, account, q) => {
+  const hubId = account.hubId;
   const lastPulledDate = new Date(account.lastPulledDates.contacts);
   const now = new Date();
 
@@ -262,6 +262,92 @@ const processContacts = async (domain, hubId, q) => {
   return true;
 };
 
+const processMeetings = async (domain, account, q) => {
+  const limit = 10;
+  const after = undefined;
+
+  /*
+  // scan possible property names
+  const response = await hubspotClient.crm.properties.coreApi.getAll('meeting');
+  const propertyNames = response.results.map(property => property.name);
+  console.log(propertyNames);
+  */
+
+  const searchRequest = {
+    /* filterGroups: [
+      {
+        filters: [
+          {
+            propertyName: 'hs_meeting_start_time', // Example property
+            operator: 'GTE',
+            value: '2024-01-01T00:00:00Z', // Search for meetings starting from a specific date
+          },
+        ],
+      },
+    ], */
+    sorts: ['hs_meeting_start_time'], // Sort by meeting start time
+    properties: [
+      'hs_meeting_title',
+      'hs_meeting_start_time',
+      'hs_meeting_end_time',
+      'hs_meeting_outcome',
+      'hs_guest_emails',
+      'hs_attachment_ids',
+      'hs_attendee_owner_ids',
+      'hubspot_owner_id',
+    ],
+    limit: 10, // Number of results to return
+    after: 0, // Pagination cursor
+  };
+
+  try {
+
+    const apiResponse = await hubspotClient.crm.objects.meetings.searchApi.doSearch(searchRequest);
+
+    const meetingsWithContacts = [];
+    for (const meeting of apiResponse.results) {
+      const meetingId = meeting.id;
+      // get contact ids
+      const response1 = await hubspotClient.crm.objects.associationsApi.getAll(
+        "meeting",  // The source object type
+        meetingId,  // The specific meeting ID
+        "contact"   // The target object type
+      );
+      const contactIds = response1.results.map(association => association.id);
+      const contactDetails = await Promise.all(
+        contactIds.map((contactId) =>
+          hubspotClient.crm.contacts.basicApi.getById(contactId, [
+            "email",
+          ])
+        )
+      );
+
+      // insert into current object
+      meeting.contacts = contactDetails.map(
+        (contactData) => contactData.properties
+      );
+
+      // store meeting with contact in separate array
+      meetingsWithContacts.push(meeting);
+    }
+
+    console.log(JSON.stringify(meetingsWithContacts, null, 2));
+  } catch (e) {
+    e.message === "HTTP request failed"
+      ? console.error(JSON.stringify(e.response, null, 2))
+      : console.error(e);
+  }
+
+  // loop thru them and push actions to queue
+
+    //  if created else updated
+
+    // finally update lastPulledDates
+    account.lastPulledDates.meetings = now;
+    await saveDomain(domain);
+    return true;
+};
+
 const createQueue = (domain, actions) => queue(async (action, callback) => {
   actions.push(action);
 
@@ -304,8 +390,8 @@ const pullDataFromHubspot = async () => {
     const actions = [];
     const q = createQueue(domain, actions);
 
-    try {
-      await processContacts(domain, account.hubId, q);
+/*     try {
+      await processContacts(domain, account, q);
       console.log('process contacts');
     } catch (err) {
       console.log(err, { apiKey: domain.apiKey, metadata: { operation: 'processContacts', hubId: account.hubId } });
@@ -317,6 +403,16 @@ const pullDataFromHubspot = async () => {
     } catch (err) {
       console.log(err, { apiKey: domain.apiKey, metadata: { operation: 'processCompanies', hubId: account.hubId } });
     }
+ */
+    try {
+      await processMeetings(domain, account, q);
+      console.log('process meetings');
+    } catch(err) {
+      console.log(err, { apiKey: domain.apiKey, metadata: {
+        operation: 'processMeetings', hubId: account.hubId
+      }})
+    }
+
 
     try {
       await drainQueue(domain, actions, q);
@@ -324,6 +420,7 @@ const pullDataFromHubspot = async () => {
     } catch (err) {
       console.log(err, { apiKey: domain.apiKey, metadata: { operation: 'drainQueue', hubId: account.hubId } });
     }
+
 
     await saveDomain(domain);
 
